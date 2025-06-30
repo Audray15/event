@@ -1,0 +1,34 @@
+# Ignorer l'environnement virtuel
+venv_test/
+venv/
+
+# Ignorer caches Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignorer fichiers d'environnement
+.env
+
+# Ignorer dossiers de migrations (optionnel)
+migrations/
+
+# Ignorer fichiers logs
+*.log
+
+# Ignorer fichiers SQLite (au cas où)
+*.db
+*.sqlite3
+
+# Ignorer fichiers pycache dans tous les sous-dossiers
+**/__pycache__/
+
+# Ignorer fichiers compilés C extensions
+*.so
+
+# Ignorer fichiers générés par IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
