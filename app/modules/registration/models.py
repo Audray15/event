@@ -2,12 +2,21 @@ from app.extensions import db
 from datetime import datetime
 
 class Registration(db.Model):
-    __tablename__ = 'registrations'  # double underscore ici
+    __tablename__ = 'registrations'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     event_id = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    user = db.relationship("User", backref="registrations")
-    event = db.relationship("Event", backref="registrations")
+    # Relations bidirectionnelles
+    user = db.relationship("User", backref="registrations", lazy=True)
+    event = db.relationship("Event", backref="registrations", lazy=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "event_id": self.event_id,
+            "created_at": self.created_at.isoformat()
+        }

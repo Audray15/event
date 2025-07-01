@@ -53,7 +53,7 @@ def valider_event(event_id):
 def get_public_events():
     return get_public_events_service(request)
 
-# ✅ Récupérer un événement public individuel (nouvelle route)
+# ✅ Récupérer un événement public individuel
 @event_bp.route('/public/<int:event_id>', methods=['GET'])
 def get_public_event_by_id(event_id):
     event = Event.query.filter_by(id=event_id, type='public', est_valide=True).first()
