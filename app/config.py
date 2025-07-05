@@ -9,7 +9,7 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")
 
     # JWT
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_jwt_secret")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "59825f4e67e7ec00a57d9c3ae534b643")
 
     # Email
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
@@ -22,3 +22,4 @@ class Config:
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'app', 'static', 'uploads')
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB max
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+    ALLOWED_ORIGINS = ["*"]
