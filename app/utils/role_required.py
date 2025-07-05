@@ -2,15 +2,12 @@ from functools import wraps
 from flask_jwt_extended import get_jwt
 from flask import jsonify
 
-ROLE_ALIASES = {
-    "user": "utilisateur",
-    "utilisateur": "utilisateur",
-    "organizer": "organisateur",
-    "organisateur": "organisateur",
-    "admin": "admin",
-    "super_admin": "super_admin",
-    "visitor": "visiteur",
-    "visiteur": "visiteur"
+ROLES_MAPPING = {
+    "user": ["user", "utilisateur"],
+    "organizer": ["organizer", "organisateur"],
+    "admin": ["admin"],
+    "super_admin": ["super_admin"],
+    "visitor": ["visitor", "visiteur"]
 }
 
 def role_required(allowed_roles):
@@ -19,9 +16,12 @@ def role_required(allowed_roles):
         def decorator(*args, **kwargs):
             claims = get_jwt()
             user_role = claims.get("role")
-            normalized_role = ROLE_ALIASES.get(user_role, user_role)
-            if normalized_role not in allowed_roles:
-                return jsonify({"message": "Accès refusé : rôle insuffisant."}), 403
-            return fn(*args, **kwargs)
+            
+            # Vérifie si le rôle est dans les rôles autorisés
+            for role_group in allowed_roles:
+                if user_role in ROLES_MAPPING.get(role_group, []):
+                    return fn(*args, **kwargs)
+            
+            return jsonify({"message": "Accès refusé : rôle insuffisant."}), 403
         return decorator
     return wrapper
