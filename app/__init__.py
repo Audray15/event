@@ -29,7 +29,7 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_jwt_secret')
     app.config['UPLOAD_FOLDER'] = 'static/uploads'  # Ajouté pour les téléchargements
 
-    CORS(app, origins="*")  # Enable CORS for all origins
+    CORS(app, origins=["*"])  # Enable CORS for all origins
 
     # Configuration du logging
     logging.basicConfig(
