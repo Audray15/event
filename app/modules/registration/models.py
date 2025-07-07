@@ -9,9 +9,9 @@ class Registration(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relations bidirectionnelles
-    user = db.relationship("User", backref="registrations", lazy=True)
-    event = db.relationship("Event", backref="registrations", lazy=True)
+    # Relations
+    user = db.relationship("User", backref="registrations")
+    event = db.relationship("Event", backref="registrations")
 
     def to_dict(self):
         return {

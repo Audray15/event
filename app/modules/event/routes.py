@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app, send_from_directory, url_for
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 
@@ -63,6 +63,9 @@ def get_public_event_by_id(event_id):
 
     statut = "à venir" if event.date > datetime.now() else "passé"
 
+    # Générer l'URL complète de l'image
+    image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
     event_data = {
         "id": event.id,
         "titre": event.titre,
@@ -71,7 +74,7 @@ def get_public_event_by_id(event_id):
         "lieu": event.lieu,
         "latitude": event.latitude,
         "longitude": event.longitude,
-        "image_url": event.image_url,
+        "image_url": image_url,
         "type": event.type,
         "statut": statut,
         "categorie_id": event.categorie_id,
@@ -82,3 +85,10 @@ def get_public_event_by_id(event_id):
     }
 
     return jsonify(event_data), 200
+
+# ✅ Route pour accéder aux images
+@event_bp.route('/images/<filename>')
+def get_image(filename):
+    """Endpoint pour servir les images uploadées"""
+    upload_folder = current_app.config['UPLOAD_FOLDER']
+    return send_from_directory(upload_folder, filename)

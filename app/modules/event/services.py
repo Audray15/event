@@ -1,10 +1,11 @@
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, url_for
 from datetime import datetime
 from app.extensions import db
 from app.modules.event.models import Event
 from werkzeug.utils import secure_filename
 import os
 import logging
+import uuid
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
@@ -72,14 +73,25 @@ def create_event_service(request, user_id):
 
         # Traitement de l'image
         image = request.files.get('image')
-        image_url = None
+        image_filename = None
         if image and image.filename != '':
+            # Vérifier la taille du fichier
+            max_size = current_app.config.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024)  # 10MB par défaut
+            if image.content_length > max_size:
+                return jsonify({
+                    "message": f"La taille de l'image dépasse la limite autorisée ({max_size//1024//1024}MB)"
+                }), 413
+            
+            # Générer un nom de fichier unique
             filename = secure_filename(image.filename)
-            upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+            ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+            unique_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+            
+            upload_folder = current_app.config['UPLOAD_FOLDER']
             os.makedirs(upload_folder, exist_ok=True)
-            image_path = os.path.join(upload_folder, filename)
+            image_path = os.path.join(upload_folder, unique_filename)
             image.save(image_path)
-            image_url = f"/{image_path.replace(os.sep, '/')}"
+            image_filename = unique_filename
 
         # Création de l'événement
         event = Event(
@@ -89,7 +101,7 @@ def create_event_service(request, user_id):
             lieu=lieu,
             latitude=latitude,
             longitude=longitude,
-            image_url=image_url,
+            image_url=image_filename,  # Stocke uniquement le nom du fichier
             type=normalized_type,
             est_valide=est_valide,
             categorie_id=int(categorie_id),
@@ -99,11 +111,15 @@ def create_event_service(request, user_id):
         db.session.add(event)
         db.session.commit()
 
+        # Générer l'URL complète de l'image
+        image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
         return jsonify({
             "message": "Événement créé avec succès.",
             "event_id": event.id,
             "type": normalized_type,
-            "est_valide": est_valide
+            "est_valide": est_valide,
+            "image_url": image_url
         }), 201
 
     except Exception as e:
@@ -145,6 +161,9 @@ def get_events_service(request):
             statut = "en attente"
             if event.est_valide:
                 statut = "à venir" if event.date > now else "passé"
+            
+            # Générer l'URL complète de l'image
+            image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
             result.append({
                 "id": event.id,
@@ -154,7 +173,7 @@ def get_events_service(request):
                 "lieu": event.lieu,
                 "latitude": event.latitude,
                 "longitude": event.longitude,
-                "image_url": event.image_url,
+                "image_url": image_url,
                 "type": event.type,
                 "statut": statut,
                 "est_valide": event.est_valide,
@@ -188,6 +207,9 @@ def get_public_events_service(request):
         result = []
         for event in events.items:
             statut = "à venir" if event.date > now else "passé"
+            
+            # Générer l'URL complète de l'image
+            image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
             result.append({
                 "id": event.id,
@@ -197,7 +219,7 @@ def get_public_events_service(request):
                 "lieu": event.lieu,
                 "latitude": event.latitude,
                 "longitude": event.longitude,
-                "image_url": event.image_url,
+                "image_url": image_url,
                 "type": event.type,
                 "statut": statut,
                 "categorie_id": event.categorie_id,
@@ -272,12 +294,33 @@ def update_event_service(request, event_id, user_id):
         if 'image' in files:
             image = files['image']
             if image.filename != '':  # Vérifier qu'un fichier a été envoyé
+                # Vérifier la taille du fichier
+                max_size = current_app.config.get('MAX_CONTENT_LENGTH', 10 * 1024 * 1024)  # 10MB par défaut
+                if image.content_length > max_size:
+                    return jsonify({
+                        "message": f"La taille de l'image dépasse la limite autorisée ({max_size//1024//1024}MB)"
+                    }), 413
+
+                # Supprimer l'ancienne image si elle existe
+                if event.image_url:
+                    try:
+                        upload_folder = current_app.config['UPLOAD_FOLDER']
+                        old_image_path = os.path.join(upload_folder, event.image_url)
+                        if os.path.exists(old_image_path):
+                            os.remove(old_image_path)
+                    except Exception as e:
+                        logger.error(f"Erreur suppression ancienne image: {str(e)}")
+                
+                # Enregistrer la nouvelle image
                 filename = secure_filename(image.filename)
-                upload_folder = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+                unique_filename = f"{uuid.uuid4().hex}.{ext}" if ext else uuid.uuid4().hex
+                
+                upload_folder = current_app.config['UPLOAD_FOLDER']
                 os.makedirs(upload_folder, exist_ok=True)
-                image_path = os.path.join(upload_folder, filename)
+                image_path = os.path.join(upload_folder, unique_filename)
                 image.save(image_path)
-                event.image_url = f"/{image_path.replace(os.sep, '/')}"
+                event.image_url = unique_filename
         
         # Mise à jour du champ est_valide
         if 'est_valide' in data:
@@ -285,10 +328,15 @@ def update_event_service(request, event_id, user_id):
             event.est_valide = est_valide_str in ['true', '1', 'yes', 'vrai', 'oui']
 
         db.session.commit()
+        
+        # Générer l'URL complète de la nouvelle image
+        image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
         return jsonify({
             "message": "Événement mis à jour avec succès.",
             "type": event.type,
-            "est_valide": event.est_valide
+            "est_valide": event.est_valide,
+            "image_url": image_url
         }), 200
 
     except Exception as e:
@@ -309,6 +357,16 @@ def delete_event_service(event_id, user_id):
         return jsonify({"message": "Non autorisé à supprimer cet événement."}), 403
 
     try:
+        # Supprimer l'image associée
+        if event.image_url:
+            try:
+                upload_folder = current_app.config['UPLOAD_FOLDER']
+                image_path = os.path.join(upload_folder, event.image_url)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            except Exception as e:
+                logger.error(f"Erreur suppression image: {str(e)}")
+
         db.session.delete(event)
         db.session.commit()
         return jsonify({"message": "Événement supprimé avec succès."}), 200
