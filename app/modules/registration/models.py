@@ -7,11 +7,11 @@ class Registration(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     event_id = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Utilisation correcte de utcnow
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relations bidirectionnelles
-    user = db.relationship("User", backref="registrations", lazy="select")
-    event = db.relationship("Event", backref="registrations", lazy="select")
+    # Relations
+    user = db.relationship("User", backref="registrations")
+    event = db.relationship("Event", backref="registrations")
 
     def to_dict(self):
         return {

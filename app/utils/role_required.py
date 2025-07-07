@@ -19,11 +19,9 @@ def role_required(allowed_roles):
             
             # Vérifie si le rôle est dans les rôles autorisés
             for role_group in allowed_roles:
-                # Vérifie si le groupe est dans le mapping
                 if role_group in ROLES_MAPPING:
                     if user_role in ROLES_MAPPING[role_group]:
                         return fn(*args, **kwargs)
-                # Permet aussi d'utiliser directement des rôles spécifiques
                 elif user_role == role_group:
                     return fn(*args, **kwargs)
             
