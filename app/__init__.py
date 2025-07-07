@@ -2,13 +2,12 @@ import os
 from flask import Flask, jsonify
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 import logging
 from datetime import datetime
 
 from app.extensions import db, migrate, jwt, cors, mail
 
-# Charger les variables d'environnement
 load_dotenv()
 
 # Importer les modèles
@@ -23,17 +22,14 @@ def str_to_bool(value):
 def create_app():
     app = Flask(__name__)
 
-    # Configuration de base
+    # Configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///default.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_jwt_secret')
     
-    # Correction de la configuration du dossier d'uploads
     base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'uploads')
-    
-    # Augmenter la limite à 10MB
     app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 
     # Configuration email
@@ -44,7 +40,7 @@ def create_app():
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', os.getenv('MAIL_USERNAME'))
 
-    # Configuration logging
+    # Logging
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
@@ -56,17 +52,19 @@ def create_app():
     migrate.init_app(app, db)
     jwt.init_app(app)
     cors.init_app(app)
-    mail.init_app(app)  # Doit être après la config
+    mail.init_app(app)
 
-    # Configuration de la base de données
+    # Configuration de la session de base de données
     engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
-    SessionLocal = sessionmaker(bind=engine)
-    app.db_session = SessionLocal
+    app.db_session = scoped_session(sessionmaker(
+        bind=engine,
+        autocommit=False,
+        autoflush=False
+    ))
 
-    # Créer le dossier d'uploads s'il n'existe pas
+    # Créer le dossier d'uploads
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
-        app.logger.info(f"Created upload folder at: {app.config['UPLOAD_FOLDER']}")
 
     # Enregistrement des blueprints
     from app.modules.user.routes import user_bp

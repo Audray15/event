@@ -5,19 +5,12 @@ from app.utils.role_required import role_required
 from app.modules.registration.models import Registration
 from app.modules.event.models import Event
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-ROLE_ALIASES = {
-    "user": "utilisateur",
-    "organizer": "organisateur",
-    "visitor": "visiteur"
-}
-
 @registration_bp.route('', methods=['POST'])
 @jwt_required()
-@role_required(['utilisateur', 'organisateur', 'admin', 'super_admin'])
+@role_required(['user', 'organizer', 'admin', 'super_admin'])
 def register_to_event():
     data = request.get_json()
     user_id = int(get_jwt_identity())
@@ -26,46 +19,37 @@ def register_to_event():
     if not event_id:
         return jsonify({"message": "Le champ 'event_id' est requis."}), 400
 
-    new_db_session = current_app.get_new_session()
+    new_db_session = current_app.db_session()
     
     try:
         event = new_db_session.get(Event, event_id)
         if not event:
             return jsonify({"message": "Événement non trouvé."}), 404
 
-        # Vérifier si l'utilisateur est déjà inscrit
-        exists = new_db_session.query(
-            new_db_session.query(Registration)
-            .filter_by(user_id=user_id, event_id=event_id)
-            .exists()
-        ).scalar()
+        existing_registration = new_db_session.query(Registration).filter_by(
+            user_id=user_id,
+            event_id=event_id
+        ).first()
 
-        if exists:
+        if existing_registration:
             return jsonify({"message": "Vous êtes déjà inscrit à cet événement."}), 409
 
-        # Création avec date explicite
         registration = Registration(
             user_id=user_id,
-            event_id=event_id,
-            created_at=datetime.utcnow()
+            event_id=event_id
         )
         new_db_session.add(registration)
         new_db_session.commit()
         
-        # Vérification de la persistance
-        persisted = new_db_session.get(Registration, registration.id)
-        if not persisted:
-            logger.error("Échec de la persistance de l'inscription")
-            return jsonify({"message": "Erreur système lors de l'inscription"}), 500
-
         return jsonify({
             "message": "Inscription réussie à l'événement.",
-            "registration_id": registration.id
+            "registration_id": registration.id,
+            "event_title": event.titre
         }), 201
     except Exception as e:
         logger.error(f"Erreur inscription: {str(e)}", exc_info=True)
         new_db_session.rollback()
-        return jsonify({"message": f"Erreur serveur: {str(e)}"}), 500
+        return jsonify({"message": "Erreur serveur lors de l'inscription"}), 500
     finally:
         new_db_session.close()
 
@@ -78,42 +62,36 @@ def unregister_from_event(event_id):
     
     logger.info(f"Désinscription demandée: user_id={user_id}, event_id={event_id}")
 
-    new_db_session = current_app.get_new_session()
+    new_db_session = current_app.db_session()
     
     try:
-        # Vérifier que l'événement existe
         event = new_db_session.get(Event, event_id)
         if not event:
-            logger.warning(f"Événement {event_id} non trouvé")
             return jsonify({"message": "Événement non trouvé."}), 404
 
-        # Recherche directe
-        registration = new_db_session.query(Registration).filter(
-            Registration.user_id == user_id,
-            Registration.event_id == event_id
+        registration = new_db_session.query(Registration).filter_by(
+            user_id=user_id,
+            event_id=event_id
         ).first()
         
         if not registration:
-            logger.warning(f"Aucune inscription trouvée: user_id={user_id}, event_id={event_id}")
             return jsonify({"message": "Vous n'êtes pas inscrit à cet événement."}), 404
 
-        # Vérifier les permissions
         is_admin = user_role in ["admin", "super_admin"]
         if registration.user_id != user_id and not is_admin:
-            logger.warning(f"Permission refusée: user_id={user_id} essaie de supprimer inscription {registration.id}")
             return jsonify({"message": "Permission refusée pour cette action."}), 403
 
-        # Suppression
         new_db_session.delete(registration)
         new_db_session.commit()
-        logger.info(f"Inscription {registration.id} supprimée avec succès")
-        return jsonify({"message": "Désinscription réussie."}), 200
+        
+        return jsonify({
+            "message": "Désinscription réussie.",
+            "event_title": event.titre
+        }), 200
     except Exception as e:
         logger.error(f"Erreur désinscription: {str(e)}", exc_info=True)
         new_db_session.rollback()
-        return jsonify({
-            "message": f"Erreur lors de la désinscription: {str(e)}"
-        }), 500
+        return jsonify({"message": "Erreur lors de la désinscription"}), 500
     finally:
         new_db_session.close()
 
@@ -121,31 +99,35 @@ def unregister_from_event(event_id):
 @jwt_required()
 @role_required(['admin', 'super_admin'])
 def admin_delete_registration(registration_id):
-    new_db_session = current_app.get_new_session()
+    new_db_session = current_app.db_session()
     
     try:
         registration = new_db_session.get(Registration, registration_id)
         if not registration:
             return jsonify({"message": "Inscription non trouvée."}), 404
 
+        event_title = registration.event.titre if registration.event else "Inconnu"
         new_db_session.delete(registration)
         new_db_session.commit()
-        return jsonify({"message": "Inscription supprimée avec succès."}), 200
+        return jsonify({
+            "message": "Inscription supprimée avec succès.",
+            "event_title": event_title
+        }), 200
     except Exception as e:
         new_db_session.rollback()
-        return jsonify({"message": f"Erreur lors de la suppression: {str(e)}"}), 500
+        return jsonify({"message": "Erreur lors de la suppression"}), 500
     finally:
         new_db_session.close()
 
 @registration_bp.route('', methods=['GET'])
 @jwt_required()
-@role_required(['utilisateur', 'organisateur', 'admin', 'super_admin'])
+@role_required(['user', 'organizer', 'admin', 'super_admin'])
 def get_user_registrations():
     user_id = int(get_jwt_identity())
     claims = get_jwt()
-    role = ROLE_ALIASES.get(claims.get("role"), claims.get("role"))
+    role = claims.get("role")
 
-    new_db_session = current_app.get_new_session()
+    new_db_session = current_app.db_session()
     
     try:
         if role in ["admin", "super_admin"] and request.args.get("all") == "1":
@@ -161,7 +143,6 @@ def get_user_registrations():
                 "event_id": event.id,
                 "event_title": event.titre,
                 "event_date": event.date.strftime('%Y-%m-%d') if event.date else None,
-                # CORRECTION: Ajout du champ event_lieu
                 "event_lieu": event.lieu,
                 "registered_at": reg.created_at.isoformat()
             })
@@ -169,26 +150,26 @@ def get_user_registrations():
         return jsonify(results), 200
     except Exception as e:
         logger.error(f"Erreur récupération inscriptions: {str(e)}")
-        return jsonify({"message": f"Erreur serveur: {str(e)}"}), 500
+        return jsonify({"message": "Erreur serveur"}), 500
     finally:
         new_db_session.close()
 
 @registration_bp.route('/event/<int:event_id>', methods=['GET'])
 @jwt_required()
-@role_required(['organisateur', 'admin', 'super_admin'])
+@role_required(['organizer', 'admin', 'super_admin'])
 def get_event_registrations(event_id):
     current_user_id = int(get_jwt_identity())
     claims = get_jwt()
-    role = ROLE_ALIASES.get(claims.get("role"), claims.get("role"))
+    user_role = claims.get("role")
 
-    new_db_session = current_app.get_new_session()
+    new_db_session = current_app.db_session()
     
     try:
         event = new_db_session.get(Event, event_id)
         if not event:
             return jsonify({"message": "Événement non trouvé."}), 404
 
-        if role == "organisateur" and event.organisateur_id != current_user_id:
+        if user_role == "organizer" and event.organisateur_id != current_user_id:
             return jsonify({"message": "Accès non autorisé aux inscriptions."}), 403
 
         registrations = new_db_session.query(Registration).filter_by(event_id=event_id).all()
@@ -212,6 +193,6 @@ def get_event_registrations(event_id):
         }), 200
     except Exception as e:
         logger.error(f"Erreur récupération inscriptions: {str(e)}")
-        return jsonify({"message": f"Erreur serveur: {str(e)}"}), 500
+        return jsonify({"message": "Erreur serveur"}), 500
     finally:
         new_db_session.close()
