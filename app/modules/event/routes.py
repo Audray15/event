@@ -42,7 +42,7 @@ def delete_event(event_id):
     return delete_event_service(event_id, user_id)
 
 # ✅ Valider un événement
-@event_bp.route('/<int:event_id>/valider', methods=['PUT'])
+@event_bp.route('/<int:event_id>/valider', methods=['PATCH'])
 @jwt_required()
 def valider_event(event_id):
     user_id = get_jwt_identity()
