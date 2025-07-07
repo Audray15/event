@@ -28,8 +28,13 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///default.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_jwt_secret')
-    app.config['UPLOAD_FOLDER'] = os.path.join(os.getcwd(), 'app', 'static', 'uploads')
-    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5MB
+    
+    # Correction de la configuration du dossier d'uploads
+    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+    app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'app', 'static', 'uploads')
+    
+    # Augmenter la limite à 10MB
+    app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB
 
     # Configuration email
     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -58,6 +63,11 @@ def create_app():
     SessionLocal = sessionmaker(bind=engine)
     app.db_session = SessionLocal
 
+    # Créer le dossier d'uploads s'il n'existe pas
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
+        app.logger.info(f"Created upload folder at: {app.config['UPLOAD_FOLDER']}")
+
     # Enregistrement des blueprints
     from app.modules.user.routes import user_bp
     from app.modules.auth import auth_bp
@@ -80,7 +90,8 @@ def create_app():
             db.session.execute('SELECT 1')
             return jsonify({
                 'status': 'healthy',
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.utcnow().isoformat(),
+                'upload_folder': app.config['UPLOAD_FOLDER']
             }), 200
         except Exception as e:
             return jsonify({
