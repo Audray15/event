@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from .services import (
     get_all_users, get_user_by_id, create_user,
-    update_user, delete_user
+    update_user, delete_user, change_password_service
 )
 from app.modules.auth.utils import role_required, is_admin
 
@@ -95,3 +95,22 @@ def remove_user(user_id):
     if not success:
         return jsonify({'message': 'Utilisateur non trouvé'}), 404
     return jsonify({'message': 'Utilisateur supprimé avec succès'}), 200
+
+# Nouvelle route pour changer le mot de passe de l'utilisateur connecté
+@user_bp.route('/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    if not data or 'old_password' not in data or 'new_password' not in data:
+        return jsonify({"message": "Les champs 'old_password' et 'new_password' sont requis."}), 400
+
+    old_password = data['old_password']
+    new_password = data['new_password']
+
+    result, error = change_password_service(user_id, old_password, new_password)
+    if error:
+        return jsonify({"message": error}), 400
+
+    return jsonify({"message": "Mot de passe changé avec succès."}), 200
