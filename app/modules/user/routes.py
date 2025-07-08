@@ -99,11 +99,23 @@ def edit_user(user_id):
 
 @user_bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
-@role_required(['admin', 'super_admin'])
 def remove_user(user_id):
+    current_user_id = get_jwt_identity()
+    user = get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'message': 'Utilisateur non trouvé'}), 404
+
+    # Autoriser la suppression de son propre compte ou par un admin
+    if user.id != int(current_user_id) and not is_admin():
+        return jsonify({
+            'message': 'Accès refusé : vous ne pouvez supprimer que votre propre compte'
+        }), 403
+
     success = delete_user(user_id)
     if not success:
-        return jsonify({'message': 'Utilisateur non trouvé'}), 404
+        return jsonify({'message': 'Erreur lors de la suppression'}), 500
+        
     return jsonify({'message': 'Utilisateur supprimé avec succès'}), 200
 
 @user_bp.route('/change-password', methods=['POST'])
