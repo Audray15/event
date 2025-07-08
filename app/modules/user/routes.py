@@ -20,11 +20,15 @@ def list_users():
 def get_user(user_id):
     current_user_id = get_jwt_identity()
     user = get_user_by_id(user_id)
+    
     if not user:
         return jsonify({'message': 'Utilisateur non trouvé'}), 404
 
-    if user.id != current_user_id and not is_admin():
-        return jsonify({'message': 'Accès refusé'}), 403
+    # Autoriser l'accès à son propre compte ou aux admins
+    if user.id != int(current_user_id) and not is_admin():
+        return jsonify({
+            'message': 'Accès refusé : vous ne pouvez accéder qu\'à votre propre compte'
+        }), 403
 
     return jsonify(user.to_dict()), 200
 
@@ -68,23 +72,29 @@ def edit_user(user_id):
         return jsonify({'message': 'Requête JSON invalide ou manquante'}), 400
 
     current_user_id = get_jwt_identity()
-
-    for forbidden in ['id', 'password']:
-        data.pop(forbidden, None)
-
     user = get_user_by_id(user_id)
+    
     if not user:
         return jsonify({'message': 'Utilisateur non trouvé'}), 404
 
-    if user.id != current_user_id and not is_admin():
-        return jsonify({'message': 'Accès refusé'}), 403
+    # Autoriser la modification de son propre compte ou par un admin
+    if user.id != int(current_user_id) and not is_admin():
+        return jsonify({
+            'message': 'Accès refusé : vous ne pouvez modifier que votre propre compte'
+        }), 403
 
+    # Empêcher la modification de certains champs
+    for forbidden in ['id', 'password']:
+        data.pop(forbidden, None)
+
+    # Seuls les admins peuvent modifier le rôle
     if 'role' in data and not is_admin():
         data.pop('role')
 
     updated_user = update_user(user_id, **data)
     if not updated_user:
         return jsonify({'message': 'Erreur lors de la mise à jour'}), 400
+        
     return jsonify(updated_user.to_dict()), 200
 
 @user_bp.route('/<int:user_id>', methods=['DELETE'])
@@ -96,7 +106,6 @@ def remove_user(user_id):
         return jsonify({'message': 'Utilisateur non trouvé'}), 404
     return jsonify({'message': 'Utilisateur supprimé avec succès'}), 200
 
-# Nouvelle route pour changer le mot de passe de l'utilisateur connecté
 @user_bp.route('/change-password', methods=['POST'])
 @jwt_required()
 def change_password():

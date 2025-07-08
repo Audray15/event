@@ -17,8 +17,19 @@ def role_required(required_roles):
         def decorator(*args, **kwargs):
             claims = get_jwt()
             role = claims.get("role")
+            
+            # Autoriser les super_admin à tout faire
+            if role == 'super_admin':
+                return fn(*args, **kwargs)
+                
+            # Vérifier si le rôle est autorisé
             if role not in required_roles:
-                return jsonify({"message": "Accès refusé : rôle non autorisé."}), 403
+                return jsonify({
+                    "message": "Accès refusé : rôle non autorisé.",
+                    "required_roles": required_roles,
+                    "your_role": role
+                }), 403
+                
             return fn(*args, **kwargs)
         return decorator
     return wrapper
