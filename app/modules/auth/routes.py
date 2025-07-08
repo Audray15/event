@@ -19,14 +19,12 @@ from .services import (
 )
 from .utils import revoke_token
 
-# Enregistrement
 @auth_bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     response = create_user_service(data)
     return jsonify(response), response.get("status", 400)
 
-# Connexion
 @auth_bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -42,7 +40,6 @@ def login():
         "user": user_data["user"]
     }), 200
 
-# Rafraîchissement du token
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh_token():
@@ -50,7 +47,6 @@ def refresh_token():
     access_token = create_access_token(identity=identity)
     return jsonify({"access_token": access_token}), 200
 
-# Déconnexion
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
@@ -60,7 +56,6 @@ def logout():
 
 @auth_bp.route('/forgot-password', methods=['POST'])
 def forgot_password():
-    """Envoie le lien de réinitialisation par email"""
     try:
         email = request.json.get('email')
         if not email:
@@ -68,22 +63,16 @@ def forgot_password():
 
         user = User.query.filter_by(email=email).first()
         if not user:
-            # Ne pas révéler que l'email n'existe pas
             return jsonify({"message": "Si l'email existe, un lien a été envoyé"}), 200
 
-        # Génération du token
         s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
         token = s.dumps(email, salt='password-reset')
         
-        # Construction de l'URL complète
         reset_url = f"{request.host_url}api/auth/reset-password?token={token}"
 
-        # Envoi SMTP direct (plus fiable que Flask-Mail)
-        with smtplib.SMTP(current_app.config['MAIL_SERVER'], 
-                         current_app.config['MAIL_PORT']) as server:
+        with smtplib.SMTP(current_app.config['MAIL_SERVER'], current_app.config['MAIL_PORT']) as server:
             server.starttls()
-            server.login(current_app.config['MAIL_USERNAME'],
-                        current_app.config['MAIL_PASSWORD'])
+            server.login(current_app.config['MAIL_USERNAME'], current_app.config['MAIL_PASSWORD'])
             
             message = f"""Subject: Réinitialisation de mot de passe
 From: {current_app.config['MAIL_DEFAULT_SENDER']}
@@ -110,19 +99,14 @@ Cliquez pour réinitialiser : {reset_url} (valable 1 heure)"""
 
 @auth_bp.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
-    """
-    GET: Vérifie la validité du token
-    POST: Réinitialise le mot de passe
-    """
     token = request.args.get('token') if request.method == 'GET' else request.json.get('token')
     
     if not token:
         return jsonify({"error": "Token manquant"}), 400
 
     try:
-        # Vérification du token
         s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        email = s.loads(token, salt='password-reset', max_age=3600)  # 1h expiration
+        email = s.loads(token, salt='password-reset', max_age=3600)
 
         if request.method == 'GET':
             return jsonify({
@@ -131,7 +115,6 @@ def reset_password():
                 "reset_link": f"{request.host_url}api/auth/reset-password?token={token}"
             }), 200
 
-        # Méthode POST
         new_password = request.json.get('password')
         if not new_password:
             return jsonify({"error": "Nouveau mot de passe requis"}), 400
