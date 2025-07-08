@@ -62,3 +62,22 @@ def delete_user(user_id):
     except Exception:
         db.session.rollback()
         return False
+
+def change_password_service(user_id, old_password, new_password):
+    user = get_user_by_id(user_id)
+    if not user:
+        return None, "Utilisateur non trouvé."
+
+    if not user.check_password(old_password):
+        return None, "L'ancien mot de passe est incorrect."
+
+    if old_password == new_password:
+        return None, "Le nouveau mot de passe doit être différent de l'ancien."
+
+    user.set_password(new_password)
+    try:
+        db.session.commit()
+        return user, None
+    except Exception as e:
+        db.session.rollback()
+        return None, "Erreur lors de la mise à jour du mot de passe."
