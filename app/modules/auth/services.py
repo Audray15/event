@@ -29,7 +29,9 @@ def create_user_service(data):
                 "id": user.id,
                 "nom": user.nom,
                 "email": user.email,
-                "role": user.role
+                "role": user.role,
+                "telephone": user.telephone,
+                "created_at": user.created_at.isoformat() if user.created_at else None
             },
             "status": 201
         }
@@ -50,7 +52,6 @@ def authenticate_user_service(email, password):
     if not user.is_active:
         return None, "Ce compte est désactivé."
 
-    # ✅ Important : convert identity en str pour éviter l'erreur "Subject must be a string"
     access_token = create_access_token(
         identity=str(user.id),
         additional_claims={"role": user.role},
@@ -69,6 +70,8 @@ def authenticate_user_service(email, password):
             "id": user.id,
             "nom": user.nom,
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "telephone": user.telephone,
+            "created_at": user.created_at.isoformat() if user.created_at else None
         }
     }, None
