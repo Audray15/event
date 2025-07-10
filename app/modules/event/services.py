@@ -196,7 +196,8 @@ def get_public_events_service(request):
                 "categorie_id": event.categorie_id,
                 "organisateur": {
                     "id": getattr(event.organisateur, 'id', None),
-                    "nom": getattr(event.organisateur, 'nom', "Inconnu")
+                    "nom": getattr(event.organisateur, 'nom', "Inconnu"),
+                    "email": getattr(event.organisateur, 'email', "Inconnu")
                 }
             })
 

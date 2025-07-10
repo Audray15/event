@@ -32,3 +32,5 @@ migrations/
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+app/static/uploads/
