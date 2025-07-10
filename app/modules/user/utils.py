@@ -1,24 +1,40 @@
-import re
-from flask import current_app
-from flask_jwt_extended import get_jwt
-from .models import User
+from functools import wraps
+from flask import jsonify
+from flask_jwt_extended import get_jwt, get_jwt_identity
+from app.modules.user.models import User
 
-def is_valid_email(email):
-    return re.match(r"[^@]+@[^@]+\.[^@]+", email) is not None
+jwt_blocklist = set()
 
-def is_valid_role(role):
-    valid_roles = ['visitor', 'user', 'organizer', 'admin', 'super_admin']
-    return role in valid_roles
+def revoke_token(jti):
+    jwt_blocklist.add(jti)
 
-def email_exists(email):
-    return User.query.filter_by(email=email).first() is not None
+def is_token_revoked(jti):
+    return jti in jwt_blocklist
 
-def log_info(message):
-    current_app.logger.info(f"[INFO] {message}")
-
-def log_error(message):
-    current_app.logger.error(f"[ERROR] {message}")
+def role_required(required_roles):
+    def wrapper(fn):
+        @wraps(fn)
+        def decorator(*args, **kwargs):
+            claims = get_jwt()
+            role = claims.get("role")
+            
+            # Autoriser les super_admin à tout faire
+            if role == 'super_admin':
+                return fn(*args, **kwargs)
+                
+            # Vérifier si le rôle est autorisé
+            if role not in required_roles:
+                return jsonify({
+                    "message": "Accès refusé : rôle non autorisé.",
+                    "required_roles": required_roles,
+                    "your_role": role
+                }), 403
+                
+            return fn(*args, **kwargs)
+        return decorator
+    return wrapper
 
 def is_admin():
-    claims = get_jwt()
-    return claims.get('role') in ['admin', 'super_admin']
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    return user and user.role in ['admin', 'super_admin']
