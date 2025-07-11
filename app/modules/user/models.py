@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
+import random
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -28,6 +29,17 @@ class User(db.Model):
 
     def check_password(self, raw_password):
         return check_password_hash(self.password, raw_password)
+    
+    def generate_reset_code(self):
+        self.reset_code = str(random.randint(100000, 999999))  # Code à 6 chiffres
+        self.reset_code_expiration = datetime.utcnow() + timedelta(minutes=10)
+        return self.reset_code
+    
+    def is_reset_code_valid(self, code):
+        if not self.reset_code or not self.reset_code_expiration:
+            return False
+        return (self.reset_code == code and 
+                datetime.utcnow() < self.reset_code_expiration)
 
     def to_dict(self):
         return {

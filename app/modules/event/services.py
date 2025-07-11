@@ -107,7 +107,6 @@ def create_event_service(request, user_id):
         db.session.rollback()
         logger.error(f"Erreur création événement: {str(e)}", exc_info=True)
         return jsonify({"message": f"Erreur lors de la création : {str(e)}"}), 500
-
 def get_events_service(request):
     try:
         page = int(request.args.get('page', 1))
@@ -129,9 +128,13 @@ def get_events_service(request):
             except ValueError:
                 pass
 
-        events = query.paginate(page=page, per_page=per_page, error_out=False)
-        now = datetime.now()
+        # 🔽 Ajout du tri du plus récent au plus ancien
+        query = query.order_by(Event.date.desc())
 
+        # 🔽 Pagination respectant les paramètres page et per_page
+        events = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        now = datetime.now()
         result = []
         for event in events.items:
             statut = "en attente"
@@ -166,6 +169,7 @@ def get_events_service(request):
     except Exception as e:
         logger.error(f"Erreur récupération événements: {str(e)}", exc_info=True)
         return jsonify({"message": f"Erreur lors de la récupération des événements: {str(e)}"}), 500
+
 
 def get_public_events_service(request):
     try:

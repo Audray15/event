@@ -1,4 +1,4 @@
-from flask import request, jsonify, url_for, current_app
+from flask import request, jsonify, current_app
 import smtplib
 from flask_jwt_extended import (
     jwt_required,
@@ -7,7 +7,7 @@ from flask_jwt_extended import (
     create_access_token,
     create_refresh_token
 )
-from datetime import timedelta
+from datetime import timedelta, datetime
 from itsdangerous import URLSafeTimedSerializer
 from flask_mail import Message
 from app.extensions import db, mail
@@ -63,22 +63,25 @@ def forgot_password():
 
         user = User.query.filter_by(email=email).first()
         if not user:
-            return jsonify({"message": "Si l'email existe, un lien a été envoyé"}), 200
+            return jsonify({"message": "Si l'email existe, un code a été envoyé"}), 200
 
-        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        token = s.dumps(email, salt='password-reset')
-        
-        reset_url = f"{request.host_url}api/auth/reset-password?token={token}"
+        # Générer et envoyer le code
+        reset_code = user.generate_reset_code()
+        db.session.commit()
 
-        with smtplib.SMTP(current_app.config['MAIL_SERVER'], current_app.config['MAIL_PORT']) as server:
+        # Envoi du code par email
+        with smtplib.SMTP(current_app.config['MAIL_SERVER'], 
+                         current_app.config['MAIL_PORT']) as server:
             server.starttls()
-            server.login(current_app.config['MAIL_USERNAME'], current_app.config['MAIL_PASSWORD'])
+            server.login(current_app.config['MAIL_USERNAME'],
+                        current_app.config['MAIL_PASSWORD'])
             
-            message = f"""Subject: Réinitialisation de mot de passe
+            message = f"""Subject: Code de réinitialisation
 From: {current_app.config['MAIL_DEFAULT_SENDER']}
 To: {email}
 
-Cliquez pour réinitialiser : {reset_url} (valable 1 heure)"""
+Votre code de réinitialisation est : {reset_code}
+Valable 10 minutes."""
             
             server.sendmail(
                 current_app.config['MAIL_DEFAULT_SENDER'],
@@ -86,7 +89,7 @@ Cliquez pour réinitialiser : {reset_url} (valable 1 heure)"""
                 message.encode('utf-8')
             )
 
-        return jsonify({"message": "Email envoyé avec succès"}), 200
+        return jsonify({"message": "Code envoyé par email"}), 200
 
     except smtplib.SMTPAuthenticationError:
         return jsonify({
@@ -97,36 +100,46 @@ Cliquez pour réinitialiser : {reset_url} (valable 1 heure)"""
         current_app.logger.error(f"Erreur: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@auth_bp.route('/reset-password', methods=['GET', 'POST'])
-def reset_password():
-    token = request.args.get('token') if request.method == 'GET' else request.json.get('token')
+@auth_bp.route('/verify-reset-code', methods=['POST'])
+def verify_reset_code():
+    data = request.get_json()
+    email = data.get('email')
+    code = data.get('code')
     
-    if not token:
-        return jsonify({"error": "Token manquant"}), 400
+    if not email or not code:
+        return jsonify({"error": "Email et code requis"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "Utilisateur non trouvé"}), 404
+    
+    if user.is_reset_code_valid(code):
+        return jsonify({
+            "message": "Code valide",
+            "email": email
+        }), 200
+    
+    return jsonify({"error": "Code invalide ou expiré"}), 400
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    email = data.get('email')
+    new_password = data.get('password')
+    
+    if not email or not new_password:
+        return jsonify({"error": "Email et mot de passe requis"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({"error": "Utilisateur non trouvé"}), 404
 
     try:
-        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-        email = s.loads(token, salt='password-reset', max_age=3600)
-
-        if request.method == 'GET':
-            return jsonify({
-                "status": "Token valide",
-                "email": email,
-                "reset_link": f"{request.host_url}api/auth/reset-password?token={token}"
-            }), 200
-
-        new_password = request.json.get('password')
-        if not new_password:
-            return jsonify({"error": "Nouveau mot de passe requis"}), 400
-
-        user = User.query.filter_by(email=email).first()
-        if not user:
-            return jsonify({"error": "Utilisateur non trouvé"}), 404
-
         user.set_password(new_password)
+        user.reset_code = None  # Invalider le code après utilisation
+        user.reset_code_expiration = None
         db.session.commit()
         return jsonify({"message": "Mot de passe mis à jour avec succès"}), 200
-
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Token invalide ou expiré" if "SignatureExpired" in str(e) else str(e)}), 400
+        return jsonify({"error": str(e)}), 400

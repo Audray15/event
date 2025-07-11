@@ -1,7 +1,8 @@
+from datetime import timedelta
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # ✅ Assure-toi que ça est bien au début
+load_dotenv()
 
 class Config:
     # Configuration de base
@@ -11,6 +12,8 @@ class Config:
 
     # JWT
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "59825f4e67e7ec00a57d9c3ae534b643")
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=30)  
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=14)    
 
     # Email
     MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
@@ -19,7 +22,7 @@ class Config:
     MAIL_USERNAME = os.getenv("MAIL_USERNAME")
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
-    
+
     # Configuration des uploads
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
