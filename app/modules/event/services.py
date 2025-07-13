@@ -3,6 +3,8 @@ from datetime import datetime
 from app.extensions import db
 from app.modules.event.models import Event
 from werkzeug.utils import secure_filename
+from sqlalchemy.orm import joinedload
+
 import os
 import logging
 import uuid
@@ -109,12 +111,12 @@ def create_event_service(request, user_id):
         return jsonify({"message": f"Erreur lors de la création : {str(e)}"}), 500
 def get_events_service(request):
     try:
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 10))
+        # On ignore pagination pour l’instant
         type_filter = request.args.get('type')
         categorie_id = request.args.get('categorie_id')
 
-        query = Event.query
+        # Charger aussi les infos organisateur
+        query = Event.query.options(joinedload(Event.organisateur))
 
         if type_filter:
             normalized_type = normalize_event_type(type_filter)
@@ -128,20 +130,25 @@ def get_events_service(request):
             except ValueError:
                 pass
 
-        # 🔽 Ajout du tri du plus récent au plus ancien
+        # Trier du plus récent au plus ancien
         query = query.order_by(Event.date.desc())
 
-        # 🔽 Pagination respectant les paramètres page et per_page
-        events = query.paginate(page=page, per_page=per_page, error_out=False)
+        events = query.all()  # ✅ plus de pagination
 
         now = datetime.now()
         result = []
-        for event in events.items:
+        for event in events:
             statut = "en attente"
             if event.est_valide:
                 statut = "à venir" if event.date > now else "passé"
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
+            organisateur_info = {
+                "id": event.organisateur.id if event.organisateur else None,
+                "nom": event.organisateur.nom if event.organisateur else "Inconnu",
+                "email": event.organisateur.email if event.organisateur else "Inconnu"
+            }
 
             result.append({
                 "id": event.id,
@@ -156,20 +163,17 @@ def get_events_service(request):
                 "statut": statut,
                 "est_valide": event.est_valide,
                 "categorie_id": event.categorie_id,
-                "organisateur_id": event.organisateur_id
+                "organisateur": organisateur_info
             })
 
         return jsonify({
             "events": result,
-            "total": events.total,
-            "page": events.page,
-            "pages": events.pages
+            "total": len(result)
         }), 200
 
     except Exception as e:
         logger.error(f"Erreur récupération événements: {str(e)}", exc_info=True)
         return jsonify({"message": f"Erreur lors de la récupération des événements: {str(e)}"}), 500
-
 
 def get_public_events_service(request):
     try:

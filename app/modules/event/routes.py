@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify, current_app, send_from_directory, url_for
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
+from sqlalchemy.orm import joinedload
+
 
 from app.extensions import db
 from app.modules.event.models import Event
@@ -50,7 +52,8 @@ def get_public_events():
 
 @event_bp.route('/public/<int:event_id>', methods=['GET'])
 def get_public_event_by_id(event_id):
-    event = Event.query.filter_by(id=event_id, type='public', est_valide=True).first()
+    event = Event.query.options(joinedload(Event.organisateur))\
+    .filter_by(id=event_id, type='public', est_valide=True).first()
 
     if not event:
         return jsonify({"message": "Événement non trouvé ou non accessible."}), 404
