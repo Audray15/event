@@ -21,5 +21,6 @@ class Event(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    categorie = db.relationship('Category', backref='events')
-    organisateur = db.relationship('User', backref='organised_events')
+    # CORRECTION : Définition explicite des relations
+    categorie = db.relationship('Category', backref='events', lazy='joined')
+    organisateur = db.relationship('User', backref='organised_events', lazy='joined')

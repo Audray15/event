@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload, load_only
 
 from app.extensions import db
 from app.modules.event.models import Event
-from app.modules.user.models import User  # Import ajouté pour User
+from app.modules.user.models import User
 from app.modules.event.services import (
     create_event_service,
     get_events_service,
@@ -24,8 +24,10 @@ def create_event():
     return create_event_service(request, user_id)
 
 @event_bp.route('', methods=['GET'])
+@jwt_required()  # Maintenant protégée par JWT
 def get_events():
-    return get_events_service(request)
+    user_id = get_jwt_identity()
+    return get_events_service(request, user_id)
 
 @event_bp.route('/<int:event_id>', methods=['PUT'])
 @jwt_required()
@@ -62,11 +64,18 @@ def get_public_event_by_id(event_id):
 
     image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-    organisateur_info = {
-        "id": event.organisateur.id,
-        "nom": event.organisateur.nom,
-        "email": event.organisateur.email
-    }
+    if event.organisateur:
+        organisateur_info = {
+            "id": event.organisateur.id,
+            "nom": event.organisateur.nom,
+            "email": event.organisateur.email
+        }
+    else:
+        organisateur_info = {
+            "id": None,
+            "nom": "Organisateur supprimé",
+            "email": ""
+        }
 
     event_data = {
         "id": event.id,

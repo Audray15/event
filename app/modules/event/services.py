@@ -2,7 +2,7 @@ from flask import request, jsonify, current_app, url_for
 from datetime import datetime
 from app.extensions import db
 from app.modules.event.models import Event
-from app.modules.user.models import User  # Import ajouté pour User
+from app.modules.user.models import User
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import joinedload, load_only
 
@@ -111,14 +111,25 @@ def create_event_service(request, user_id):
         logger.error(f"Erreur création événement: {str(e)}", exc_info=True)
         return jsonify({"message": f"Erreur lors de la création : {str(e)}"}), 500
 
-def get_events_service(request):
+def get_events_service(request, current_user_id=None):
     try:
         type_filter = request.args.get('type')
         categorie_id = request.args.get('categorie_id')
 
+        # Vérifier si l'utilisateur est admin
+        is_admin = False
+        if current_user_id:
+            user = User.query.get(current_user_id)
+            if user and user.role in ['admin', 'super_admin']:
+                is_admin = True
+
         query = Event.query.options(
             joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
         )
+
+        # Appliquer le filtre utilisateur si nécessaire
+        if current_user_id and not is_admin:
+            query = query.filter(Event.organisateur_id == current_user_id)
 
         if type_filter:
             normalized_type = normalize_event_type(type_filter)
@@ -144,11 +155,18 @@ def get_events_service(request):
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-            organisateur_info = {
-                "id": event.organisateur.id,
-                "nom": event.organisateur.nom,
-                "email": event.organisateur.email
-            }
+            if event.organisateur:
+                organisateur_info = {
+                    "id": event.organisateur.id,
+                    "nom": event.organisateur.nom,
+                    "email": event.organisateur.email
+                }
+            else:
+                organisateur_info = {
+                    "id": None,
+                    "nom": "Organisateur supprimé",
+                    "email": ""
+                }
 
             result.append({
                 "id": event.id,
@@ -168,7 +186,8 @@ def get_events_service(request):
 
         return jsonify({
             "events": result,
-            "total": len(result)
+            "total": len(result),
+            "is_admin": is_admin  # Pour information front-end
         }), 200
 
     except Exception as e:
@@ -193,11 +212,18 @@ def get_public_events_service(request):
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-            organisateur_info = {
-                "id": event.organisateur.id,
-                "nom": event.organisateur.nom,
-                "email": event.organisateur.email
-            }
+            if event.organisateur:
+                organisateur_info = {
+                    "id": event.organisateur.id,
+                    "nom": event.organisateur.nom,
+                    "email": event.organisateur.email
+                }
+            else:
+                organisateur_info = {
+                    "id": None,
+                    "nom": "Organisateur supprimé",
+                    "email": ""
+                }
 
             result.append({
                 "id": event.id,
