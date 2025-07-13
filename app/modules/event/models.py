@@ -12,7 +12,7 @@ class Event(db.Model):
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     image_url = db.Column(db.String(255), nullable=True)
-    type = db.Column(db.String(20), default='public')  # public ou privé
+    type = db.Column(db.String(20), default='public')
     est_valide = db.Column(db.Boolean, default=False)
 
     categorie_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)

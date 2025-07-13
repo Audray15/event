@@ -2,8 +2,9 @@ from flask import request, jsonify, current_app, url_for
 from datetime import datetime
 from app.extensions import db
 from app.modules.event.models import Event
+from app.modules.user.models import User  # Import ajouté pour User
 from werkzeug.utils import secure_filename
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, load_only
 
 import os
 import logging
@@ -109,14 +110,15 @@ def create_event_service(request, user_id):
         db.session.rollback()
         logger.error(f"Erreur création événement: {str(e)}", exc_info=True)
         return jsonify({"message": f"Erreur lors de la création : {str(e)}"}), 500
+
 def get_events_service(request):
     try:
-        # On ignore pagination pour l’instant
         type_filter = request.args.get('type')
         categorie_id = request.args.get('categorie_id')
 
-        # Charger aussi les infos organisateur
-        query = Event.query.options(joinedload(Event.organisateur))
+        query = Event.query.options(
+            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
+        )
 
         if type_filter:
             normalized_type = normalize_event_type(type_filter)
@@ -130,10 +132,8 @@ def get_events_service(request):
             except ValueError:
                 pass
 
-        # Trier du plus récent au plus ancien
         query = query.order_by(Event.date.desc())
-
-        events = query.all()  # ✅ plus de pagination
+        events = query.all()
 
         now = datetime.now()
         result = []
@@ -145,9 +145,9 @@ def get_events_service(request):
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
             organisateur_info = {
-                "id": event.organisateur.id if event.organisateur else None,
-                "nom": event.organisateur.nom if event.organisateur else "Inconnu",
-                "email": event.organisateur.email if event.organisateur else "Inconnu"
+                "id": event.organisateur.id,
+                "nom": event.organisateur.nom,
+                "email": event.organisateur.email
             }
 
             result.append({
@@ -180,7 +180,10 @@ def get_public_events_service(request):
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10))
 
-        query = Event.query.filter_by(type='public', est_valide=True)
+        query = Event.query.options(
+            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
+        ).filter_by(type='public', est_valide=True)
+
         events = query.paginate(page=page, per_page=per_page, error_out=False)
         now = datetime.now()
 
@@ -189,6 +192,12 @@ def get_public_events_service(request):
             statut = "à venir" if event.date > now else "passé"
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
+            organisateur_info = {
+                "id": event.organisateur.id,
+                "nom": event.organisateur.nom,
+                "email": event.organisateur.email
+            }
 
             result.append({
                 "id": event.id,
@@ -202,11 +211,7 @@ def get_public_events_service(request):
                 "type": event.type,
                 "statut": statut,
                 "categorie_id": event.categorie_id,
-                "organisateur": {
-                    "id": getattr(event.organisateur, 'id', None),
-                    "nom": getattr(event.organisateur, 'nom', "Inconnu"),
-                    "email": getattr(event.organisateur, 'email', "Inconnu")
-                }
+                "organisateur": organisateur_info
             })
 
         return jsonify({

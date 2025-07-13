@@ -1,11 +1,11 @@
 from flask import Blueprint, request, jsonify, current_app, send_from_directory, url_for
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
-from sqlalchemy.orm import joinedload
-
+from sqlalchemy.orm import joinedload, load_only
 
 from app.extensions import db
 from app.modules.event.models import Event
+from app.modules.user.models import User  # Import ajouté pour User
 from app.modules.event.services import (
     create_event_service,
     get_events_service,
@@ -39,7 +39,6 @@ def delete_event(event_id):
     user_id = get_jwt_identity()
     return delete_event_service(event_id, user_id)
 
-# ✅ Valider un événement
 @event_bp.route('/<int:event_id>/valider', methods=['PATCH'])
 @jwt_required()
 def valider_event(event_id):
@@ -52,8 +51,9 @@ def get_public_events():
 
 @event_bp.route('/public/<int:event_id>', methods=['GET'])
 def get_public_event_by_id(event_id):
-    event = Event.query.options(joinedload(Event.organisateur))\
-    .filter_by(id=event_id, type='public', est_valide=True).first()
+    event = Event.query.options(
+        joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
+    ).filter_by(id=event_id, type='public', est_valide=True).first()
 
     if not event:
         return jsonify({"message": "Événement non trouvé ou non accessible."}), 404
@@ -61,6 +61,12 @@ def get_public_event_by_id(event_id):
     statut = "à venir" if event.date > datetime.now() else "passé"
 
     image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
+
+    organisateur_info = {
+        "id": event.organisateur.id,
+        "nom": event.organisateur.nom,
+        "email": event.organisateur.email
+    }
 
     event_data = {
         "id": event.id,
@@ -74,10 +80,7 @@ def get_public_event_by_id(event_id):
         "type": event.type,
         "statut": statut,
         "categorie_id": event.categorie_id,
-        "organisateur": {
-            "id": getattr(event.organisateur, 'id', None),
-            "nom": getattr(event.organisateur, 'nom', "Inconnu")
-        }
+        "organisateur": organisateur_info
     }
 
     return jsonify(event_data), 200
