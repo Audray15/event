@@ -209,8 +209,10 @@ def get_public_events_service(request):
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 10))
 
+        # Charger aussi la catégorie avec le nom
         query = Event.query.options(
-            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
+            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email),
+            joinedload(Event.categorie).load_only(Category.id, Category.nom)  # Ajouté
         ).filter_by(type='public', est_valide=True)
 
         events = query.paginate(page=page, per_page=per_page, error_out=False)
@@ -222,18 +224,25 @@ def get_public_events_service(request):
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-            if event.organisateur:
-                organisateur_info = {
-                    "id": event.organisateur.id,
-                    "nom": event.organisateur.nom,
-                    "email": event.organisateur.email
-                }
-            else:
-                organisateur_info = {
-                    "id": None,
-                    "nom": "Organisateur supprimé",
-                    "email": ""
-                }
+            # Organisateur
+            organisateur_info = {
+                "id": event.organisateur.id,
+                "nom": event.organisateur.nom,
+                "email": event.organisateur.email
+            } if event.organisateur else {
+                "id": None,
+                "nom": "Organisateur supprimé",
+                "email": ""
+            }
+            
+            # Nouveau : Information de la catégorie
+            categorie_info = {
+                "id": event.categorie.id,
+                "nom": event.categorie.nom
+            } if event.categorie else {
+                "id": None,
+                "nom": "Catégorie supprimée"
+            }
 
             result.append({
                 "id": event.id,
@@ -246,7 +255,7 @@ def get_public_events_service(request):
                 "image_url": image_url,
                 "type": event.type,
                 "statut": statut,
-                "categorie_id": event.categorie_id,
+                "categorie": categorie_info,  # Changé de categorie_id à categorie
                 "organisateur": organisateur_info
             })
 
