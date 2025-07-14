@@ -7,20 +7,21 @@ from app.modules.category.services import (
 )
 from app.modules.auth.utils import role_required
 
+# Route publique - Accès sans authentification
 @category_bp.route('/', methods=['GET'])
-@jwt_required()
-def list_categories():
+def list_categories():  # Retiré @jwt_required
     categories = get_all_categories()
     return jsonify([cat.to_dict() for cat in categories]), 200
 
+# Route publique - Accès sans authentification
 @category_bp.route('/<int:category_id>', methods=['GET'])
-@jwt_required()
-def get_category(category_id):
+def get_category(category_id):  # Retiré @jwt_required
     category = get_category_by_id(category_id)
     if not category:
         return jsonify({'message': 'Catégorie non trouvée'}), 404
     return jsonify(category.to_dict()), 200
 
+# Routes protégées pour les opérations CRUD
 @category_bp.route('/', methods=['POST'])
 @jwt_required()
 @role_required(['admin', 'super_admin'])

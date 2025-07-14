@@ -3,6 +3,7 @@ from datetime import datetime
 from app.extensions import db
 from app.modules.event.models import Event
 from app.modules.user.models import User
+from app.modules.category.models import Category
 from werkzeug.utils import secure_filename
 from sqlalchemy.orm import joinedload, load_only
 
@@ -123,8 +124,10 @@ def get_events_service(request, current_user_id=None):
             if user and user.role in ['admin', 'super_admin']:
                 is_admin = True
 
-        query = Event.query.options(
-            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
+        # Chargement optimisé avec toutes les relations nécessaires
+        query = db.session.query(Event).options(
+            joinedload(Event.organisateur).load_only(User.id, User.nom, User.email),
+            joinedload(Event.categorie).load_only(Category.id, Category.nom)
         )
 
         # Appliquer le filtre utilisateur si nécessaire
@@ -134,12 +137,12 @@ def get_events_service(request, current_user_id=None):
         if type_filter:
             normalized_type = normalize_event_type(type_filter)
             if normalized_type:
-                query = query.filter_by(type=normalized_type)
+                query = query.filter(Event.type == normalized_type)
 
         if categorie_id:
             try:
                 categorie_id_int = int(categorie_id)
-                query = query.filter_by(categorie_id=categorie_id_int)
+                query = query.filter(Event.categorie_id == categorie_id_int)
             except ValueError:
                 pass
 
@@ -155,18 +158,25 @@ def get_events_service(request, current_user_id=None):
 
             image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-            if event.organisateur:
-                organisateur_info = {
-                    "id": event.organisateur.id,
-                    "nom": event.organisateur.nom,
-                    "email": event.organisateur.email
-                }
-            else:
-                organisateur_info = {
-                    "id": None,
-                    "nom": "Organisateur supprimé",
-                    "email": ""
-                }
+            # Organisateur
+            organisateur_info = {
+                "id": event.organisateur.id,
+                "nom": event.organisateur.nom,
+                "email": event.organisateur.email
+            } if event.organisateur else {
+                "id": None,
+                "nom": "Organisateur supprimé",
+                "email": ""
+            }
+
+            # Catégorie
+            categorie_info = {
+                "id": event.categorie.id,
+                "nom": event.categorie.nom
+            } if event.categorie else {
+                "id": None,
+                "nom": "Catégorie supprimée"
+            }
 
             result.append({
                 "id": event.id,
@@ -180,14 +190,14 @@ def get_events_service(request, current_user_id=None):
                 "type": event.type,
                 "statut": statut,
                 "est_valide": event.est_valide,
-                "categorie_id": event.categorie_id,
+                "categorie": categorie_info,  # Changé de categorie_id à categorie
                 "organisateur": organisateur_info
             })
 
         return jsonify({
             "events": result,
             "total": len(result),
-            "is_admin": is_admin  # Pour information front-end
+            "is_admin": is_admin
         }), 200
 
     except Exception as e:

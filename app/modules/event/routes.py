@@ -5,6 +5,7 @@ from sqlalchemy.orm import joinedload, load_only
 
 from app.extensions import db
 from app.modules.event.models import Event
+from app.modules.category.models import Category
 from app.modules.user.models import User
 from app.modules.event.services import (
     create_event_service,
@@ -53,9 +54,11 @@ def get_public_events():
 
 @event_bp.route('/public/<int:event_id>', methods=['GET'])
 def get_public_event_by_id(event_id):
-    event = Event.query.options(
-        joinedload(Event.organisateur).load_only(User.id, User.nom, User.email)
-    ).filter_by(id=event_id, type='public', est_valide=True).first()
+    # Chargement optimisé avec toutes les relations nécessaires
+    event = db.session.query(Event).options(
+        joinedload(Event.organisateur).load_only(User.id, User.nom, User.email),
+        joinedload(Event.categorie).load_only(Category.id, Category.nom)
+    ).filter(Event.id == event_id, Event.type == 'public', Event.est_valide == True).first()
 
     if not event:
         return jsonify({"message": "Événement non trouvé ou non accessible."}), 404
@@ -64,18 +67,25 @@ def get_public_event_by_id(event_id):
 
     image_url = url_for('event.get_image', filename=event.image_url, _external=True) if event.image_url else None
 
-    if event.organisateur:
-        organisateur_info = {
-            "id": event.organisateur.id,
-            "nom": event.organisateur.nom,
-            "email": event.organisateur.email
-        }
-    else:
-        organisateur_info = {
-            "id": None,
-            "nom": "Organisateur supprimé",
-            "email": ""
-        }
+    # Organisateur
+    organisateur_info = {
+        "id": event.organisateur.id,
+        "nom": event.organisateur.nom,
+        "email": event.organisateur.email
+    } if event.organisateur else {
+        "id": None,
+        "nom": "Organisateur supprimé",
+        "email": ""
+    }
+
+    # Catégorie
+    categorie_info = {
+        "id": event.categorie.id,
+        "nom": event.categorie.nom
+    } if event.categorie else {
+        "id": None,
+        "nom": "Catégorie supprimée"
+    }
 
     event_data = {
         "id": event.id,
@@ -88,7 +98,7 @@ def get_public_event_by_id(event_id):
         "image_url": image_url,
         "type": event.type,
         "statut": statut,
-        "categorie_id": event.categorie_id,
+        "categorie": categorie_info,  # Changé de categorie_id à categorie
         "organisateur": organisateur_info
     }
 
